@@ -14,4 +14,8 @@ from langgraph.graph.message import add_messages
 
 class AnalystState(TypedDict):
     messages: Annotated[list, add_messages]
-    # TODO: plan, current_step_index, step_results, next_agent, final_answer
+    plan: list[str]
+    current_step_index: int
+    step_results: list[str]
+    next_agent: str
+    final_answer: str

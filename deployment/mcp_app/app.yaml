@@ -1,0 +1,6 @@
+# Bonus C — Databricks App config for the standalone MCP tool server.
+# Deploy with:
+#   databricks apps create cs4603-mcp-tools
+#   databricks sync . <workspace-path>            # ship tools/ + deployment/mcp_app/
+#   databricks apps deploy cs4603-mcp-tools --source-code-path <workspace-path>
+command: ["python", "deployment/mcp_app/app.py"]

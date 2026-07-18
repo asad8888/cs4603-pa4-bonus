@@ -1,11 +1,8 @@
 # Bonus A — CI/CD pipeline (.github/workflows/deploy.yml)
 #
-# TODO: Implement a lint -> test -> deploy workflow.
-#   - lint:   ruff check on agent/ and client/
-#   - test:   a smoke test that imports and compiles the graph
-#   - deploy: ONLY on push to main; log the model, register a new UC version,
-#             and update the serving endpoint. Use GitHub Secrets for
-#             DATABRICKS_HOST / DATABRICKS_TOKEN. Add a workflow_dispatch trigger.
+# lint -> test -> deploy. Deploy runs ONLY on push to main (never on PRs or
+# feature branches). A manual trigger (workflow_dispatch) is included for
+# ad-hoc deploys. DATABRICKS_HOST / DATABRICKS_TOKEN come from GitHub Secrets.
 
 name: deploy
 
@@ -20,12 +17,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # TODO: install uv, sync deps, run `ruff check` and the smoke test
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check agent/ client/
+
+      - name: Smoke test (offline graph build + invoke)
+        run: uv run pytest -q
 
   deploy:
     needs: lint-and-test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      # Non-secret config the deploy script needs; override via repo variables.
+      DATABRICKS_MODEL: ${{ vars.DATABRICKS_MODEL || 'databricks-meta-llama-3-3-70b-instruct' }}
+      EMBEDDINGS_ENDPOINT: ${{ vars.EMBEDDINGS_ENDPOINT || 'databricks-gte-large-en' }}
+      UC_CATALOG: ${{ vars.UC_CATALOG || 'main' }}
+      UC_SCHEMA: ${{ vars.UC_SCHEMA || 'default' }}
+      MODEL_NAME: ${{ vars.MODEL_NAME || 'document_analyst' }}
+      SERVING_ENDPOINT_NAME: ${{ vars.SERVING_ENDPOINT_NAME || 'document-analyst' }}
+      SECRET_SCOPE: ${{ vars.SECRET_SCOPE || 'cs4603-deploy' }}
+      VECTOR_SEARCH_ENDPOINT: ${{ vars.VECTOR_SEARCH_ENDPOINT }}
+      VECTOR_SEARCH_INDEX: ${{ vars.VECTOR_SEARCH_INDEX }}
     steps:
       - uses: actions/checkout@v4
-      # TODO: install deps and run `python deployment/deploy.py` with secrets
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Log, register, and update the serving endpoint
+        run: uv run python deployment/deploy.py
+
+      - name: Report deployment status
+        run: |
+          echo "Deploy step finished for endpoint '${SERVING_ENDPOINT_NAME}'."
+          echo "Model: ${UC_CATALOG}.${UC_SCHEMA}.${MODEL_NAME}"
